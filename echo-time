@@ -1,0 +1,9 @@
+#!/bin/sh
+while true
+do
+    now=$(date +'%a %F %l:%M %p')
+    echo "$now"
+    echo "$now" > /dev/usb/lp0
+    sleep 60
+done
+
