@@ -106,17 +106,21 @@ class ChannelWatcher(object):
         '''
         return self._api_call('channels.info', channel=channel)
 
-def main():
+def make_watcher():
     token = open('api.token', 'r').read().strip()
     client = SlackClient(token)
     print(client.api_call('users.profile.get'))
     lp = Usb(0x04b8, 0x0202, 0, profile="TM-T88III")
-    #lp.image('doge.jpg')
     watcher = ChannelWatcher(client, lp)
     watcher.watch_channel('shitposting')
     watcher.watch_channel('slack_api_testing')
     watcher.watch_channel('slack_api_cwallace')
     watcher.watch_channel('GHUEMR31V') # slack_api_cwallace
+
+    return watcher
+
+def main():
+    watcher = make_watcher()
 
     while True:
         watcher.poll()
