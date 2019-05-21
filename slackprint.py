@@ -6,6 +6,7 @@ import time
 import urllib.request
 
 from escpos.printer import Usb
+from PIL import Image, ImageOps
 
 # If an API call fails, sleep for this long
 RATE_LIMIT_SLEEP = 5
@@ -18,6 +19,7 @@ class ChannelWatcher(object):
         self._client = client
         self._line_printer = line_printer
         self._watching_channels = set()
+        self._max_image_width = 512 # guess. smaller than 640, larger than 277.
         print("connecting:", self._client.rtm_connect(auto_reconnect=True))
 
     def watch_channel(self, channel_name):
@@ -71,7 +73,22 @@ class ChannelWatcher(object):
         if mimetype.startswith('image/'):
             print('fetching image', url)
             file_handle = self._fetch_file(url)
-            self._line_printer.image(file_handle)
+            self._handle_image(file_handle)
+
+    def _handle_image(self, im_handle):
+        '''
+        Print an image, taking any handle which PIL knows how to open.
+        If the image is too large for the printer, it will be appropriately scaled.
+        '''
+        im = Image.open(im_handle)
+        if im.width > self._max_image_width:
+            # Scale down the image
+            new_width = self._max_image_width
+            scale = new_width / im.width
+            new_height = int(round(im.height*scale))
+            im = ImageOps.fit(im, (new_width, new_height)) # TODO: defaults to nearest-neighbor?
+
+        self._line_printer.image(im)
 
     def _write(self, text):
         try:
