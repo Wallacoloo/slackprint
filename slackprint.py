@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from slackclient import SlackClient
+from slack import RTMClient, WebClient
 import functools
 import time
 import urllib.request
@@ -15,26 +15,30 @@ RATE_LIMIT_SLEEP = 5
 KNOWN_ERRORS = ['method_not_supported_for_channel_type']
 
 class ChannelWatcher(object):
-    def __init__(self, client, line_printer):
-        self._client = client
+    def __init__(self, rtm_client, web_client, line_printer):
+        self._rtm_client = rtm_client
+        self._web_client = web_client
         self._line_printer = line_printer
         self._watching_channels = set()
         self._max_image_width = 512 # guess. smaller than 640, larger than 277.
-        print("connecting:", self._client.rtm_connect(auto_reconnect=True))
+        rtm_client.on(event='message', callback=self._handle_event)
+        #print("connecting:", self._rtm_client.rtm_connect()) #auto_reconnect=True
 
     def watch_channel(self, channel_name):
         self._watching_channels.add(channel_name)
 
-    def poll(self):
-        events = self._client.rtm_read()
-        for event in events:
-            print('event', event)
-            try:
-                self._handle_event(event)
-            except Exception as e:
-                print('error handling event', e)
+    #def poll(self):
+    #    events = self._rtm_client.rtm_read()
+    #    for event in events:
+    #        print('event', event)
+    #        try:
+    #            self._handle_event(event)
+    #        except Exception as e:
+    #            print('error handling event', e)
 
-    def _handle_event(self, event):
+    def _handle_event(self, **event):
+        print('event', event)
+        event = event['data']
         channel = event.get('channel')
         print('channel', channel)
         if not isinstance(channel, str):
@@ -101,7 +105,7 @@ class ChannelWatcher(object):
 
     def _api_call(self, endpoint, **kwargs):
         for i in range(2):
-            results = self._client.api_call(endpoint, **kwargs)
+            results = self._web_client.api_call(endpoint, json=kwargs)
             is_ok = results.get('ok', True)
             if is_ok: break
             print('api returned error', results)
@@ -110,7 +114,7 @@ class ChannelWatcher(object):
         return results
 
     def _fetch_file(self, url):
-        auth = 'Bearer {}'.format(self._client.token)
+        auth = 'Bearer {}'.format(self._web_client.token)
         req = urllib.request.Request(url, headers={'Authorization': auth})
         return urllib.request.urlopen(req)
 
@@ -125,10 +129,11 @@ class ChannelWatcher(object):
 
 def make_watcher():
     token = open('api.token', 'r').read().strip()
-    client = SlackClient(token)
-    print(client.api_call('users.profile.get'))
-    lp = Usb(0x04b8, 0x0202, 0, profile="TM-T88III")
-    watcher = ChannelWatcher(client, lp)
+    rtm_client = RTMClient(token=token)
+    web_client = WebClient(token=token)
+    print(web_client.api_call('users.profile.get'))
+    lp = Usb(0x04b8, 0x0202, 0) #, profile="TM-T88III"
+    watcher = ChannelWatcher(rtm_client, web_client, lp)
     watcher.watch_channel('shitposting')
     watcher.watch_channel('slack_api_testing')
     watcher.watch_channel('slack_api_cwallace')
@@ -138,10 +143,12 @@ def make_watcher():
 
 def main():
     watcher = make_watcher()
+    watcher._rtm_client.start()
 
-    while True:
-        watcher.poll()
-        time.sleep(2)
+    #while True:
+    #    watcher.poll()
+    #    time.sleep(2)
+    #watcher._rtm_client.stop()
 
 if __name__ == '__main__':
     main()
